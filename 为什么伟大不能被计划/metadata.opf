@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="uuid_id" version="2.0">
+    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+        <dc:identifier opf:scheme="calibre" id="calibre_id">91473095-1d86-444f-b29b-a30b348a50d9</dc:identifier>
+        <dc:identifier opf:scheme="uuid" id="uuid_id">91473095-1d86-444f-b29b-a30b348a50d9</dc:identifier>
+        <dc:title>107059_为什么伟大不能被计划：对创意、创新和创造的自由探索_【美】 肯尼斯·斯坦利；乔尔·雷曼</dc:title>
+        <dc:creator opf:file-as="肯尼斯·斯坦利；乔尔·雷曼, 【美】" opf:role="aut">【美】 肯尼斯·斯坦利；乔尔·雷曼</dc:creator>
+        <dc:contributor opf:file-as="calibre" opf:role="bkp">calibre (6.10.0) [https://calibre-ebook.com]</dc:contributor>
+        <dc:date>0101-01-01T00:00:00+00:00</dc:date>
+        <dc:description>两位作者持续多年扎根人工智能前沿领域，这本书是他们在科学研究的过程中蹦出的意外火花。因为这一全新发现并不是直接回馈于他们本身所处的人工智能领域，而是“无心插柳”收获了对人类约定俗成的思维方式的全新颠覆。这一研究打破了人类世界延续多年、难以撼动的、依靠目标和计划成事的文化基因，真正开启了人类伟大创新的惊喜之旅。他们在学校、TED、科研论坛等场合公开演讲，让这一新思维方式影响并激励了许多人。他们自身也凭借写入本书的“寻宝者思维”“踏脚石模型”“新奇式探索”等具体思维方法，在人工智能研发领域取得了飞跃式的突破和进展，产生了一系列惠于人类的伟大创造。</dc:description>
+        <dc:language>en</dc:language>
+        <meta name="calibre:author_link_map" content="{}"/>
+    </metadata>
+    <guide>
+        <reference type="cover" title="Cover" href="cover.jpg"/>
+    </guide>
+</package>
