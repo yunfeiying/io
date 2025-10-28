@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>目录列表 — main</title>
+  <title>目录列表 — main（调试版）</title>
   <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 1rem; max-width: 900px; margin: auto; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 1rem; max-width: 1000px; margin: auto; }
     header { display:flex; gap:1rem; align-items:center; margin-bottom:1rem; }
     label { font-size: .9rem; color:#333; }
     input[type=text], input[type=password], select { padding:.4rem .6rem; border:1px solid #ddd; border-radius:6px; }
@@ -17,12 +17,14 @@
     .meta { color:#666; font-size:.85rem; }
     .error { color:#b31d28; margin-top:.5rem; }
     .hint { color:#444; font-size:.9rem; margin-top:.5rem; }
+    pre { background:#f6f8fa; border:1px solid #e1e4e8; padding:.6rem; overflow:auto; max-height:320px; }
+    .debug { margin-top:1rem; }
     footer { margin-top:1.5rem; color:#666; font-size:.85rem; }
   </style>
 </head>
 <body>
   <header>
-    <h1>main 目录列表</h1>
+    <h1>main 目录列表（调试版）</h1>
   </header>
 
   <section aria-labelledby="settings">
@@ -40,12 +42,12 @@
         <input id="path" type="text" value="main" />
       </label>
       <label style="display:flex; align-items:center;">Token
-        <input id="token" type="password" placeholder="可选：用来增加速率限制/私有仓库" />
+        <input id="token" type="password" placeholder="可选：用于私有仓库或提高速率限制" />
       </label>
       <button id="listBtn">列出文件夹</button>
       <button id="autoDetect" class="secondary">自动检测（GitHub Pages）</button>
     </div>
-    <div class="hint">说明：如果页面托管在 GitHub Pages（username.github.io/repo/），可尝试自动检测 owner/repo。若仓库为私有或大量请求，请填入 GitHub 个人 access token（只需 repo 权限或无权限即可做公共请求）。</div>
+    <div class="hint">提示：如果仓库为私有或遇到速率限制，请填写个人 access token。注意：Git 不会跟踪空文件夹（需放入 .gitkeep / README.md）。</div>
     <div id="msg" class="error" role="status" aria-live="polite"></div>
   </section>
 
@@ -54,10 +56,21 @@
     <div id="results">
       <p class="hint">还未查询 — 点击“列出文件夹”以加载 main 目录下的子文件夹。</p>
     </div>
+
+    <div class="debug">
+      <h3>API Debug（显示 HTTP 状态 / 关键 headers / 原始 JSON）</h3>
+      <div><strong>请求 URL：</strong> <span id="apiUrl">-</span></div>
+      <div><strong>HTTP 状态：</strong> <span id="httpStatus">-</span></div>
+      <div><strong>速率限制：</strong> <span id="rateInfo">-</span></div>
+      <div><strong>响应头（部分）：</strong></div>
+      <pre id="headers">-</pre>
+      <div><strong>原始 JSON 响应：</strong></div>
+      <pre id="raw">-</pre>
+    </div>
   </main>
 
   <footer>
-    生成器：通过 GitHub API 列出仓库 contents（仅列出 type === "dir" 的条目）。制作时间：2025。
+    生成器：通过 GitHub API 列出仓库 contents（仅列出 type === "dir" 的条目）。调试版会显示 API 返回详情以便排查问题。
   </footer>
 
 <script>
@@ -72,10 +85,38 @@
   const msgEl = document.getElementById('msg');
   const currentPathEl = document.getElementById('currentPath');
 
+  const apiUrlEl = document.getElementById('apiUrl');
+  const httpStatusEl = document.getElementById('httpStatus');
+  const rateInfoEl = document.getElementById('rateInfo');
+  const headersEl = document.getElementById('headers');
+  const rawEl = document.getElementById('raw');
+
   function showMessage(text){
     msgEl.textContent = text;
-    if(!text) msgEl.style.display = 'none';
-    else msgEl.style.display = 'block';
+    msgEl.style.display = text ? 'block' : 'none';
+  }
+
+  function showDebug(url, status, hdrs, jsonText){
+    apiUrlEl.textContent = url;
+    httpStatusEl.textContent = status;
+    try {
+      const remain = hdrs.get('x-ratelimit-remaining');
+      const limit = hdrs.get('x-ratelimit-limit');
+      const reset = hdrs.get('x-ratelimit-reset');
+      rateInfoEl.textContent = remain !== null ? `${remain} / ${limit} (reset: ${reset})` : '-';
+    } catch(e){
+      rateInfoEl.textContent = '-';
+    }
+    // show some headers
+    const toShow = ['content-type','x-ratelimit-remaining','x-ratelimit-limit','x-ratelimit-reset','link'];
+    const obj = {};
+    toShow.forEach(k => { const v = hdrs.get(k); if(v) obj[k]=v; });
+    headersEl.textContent = JSON.stringify(obj, null, 2);
+    try {
+      rawEl.textContent = JSON.stringify(JSON.parse(jsonText), null, 2);
+    } catch(e){
+      rawEl.textContent = jsonText;
+    }
   }
 
   async function listContents(owner, repo, branch, path, token){
@@ -89,31 +130,76 @@
 
     try {
       const res = await fetch(apiUrl, { headers });
-      if (res.status === 404) {
-        throw new Error('路径或仓库不存在，或没有权限访问（404）。请检查 owner/repo/branch/path 是否正确。');
+      const status = res.status;
+      const hdrs = res.headers;
+      const text = await res.text();
+
+      showDebug(apiUrl, status, hdrs, text);
+
+      if (status === 404) {
+        resultsEl.innerHTML = '';
+        showMessage('404：路径或仓库不存在，或没有权限访问。请检查 owner/repo/branch/path 是否正确，并确认仓库是公开或已填写 token。');
+        return;
       }
-      if (res.status === 401 || res.status === 403) {
-        const text = await res.text();
-        throw new Error(`权限或速率限制问题：HTTP ${res.status} — ${text}`);
-      }
-      const data = await res.json();
-      if (!Array.isArray(data)) {
-        // 当 path 指向单个文件时，API 返回对象而非数组
-        throw new Error('指定 path 不是目录，或 API 返回预期之外的数据。');
+      if (status === 401 || status === 403) {
+        resultsEl.innerHTML = '';
+        showMessage(`HTTP ${status}：权限或速率限制问题。响应信息见 API Debug 区。`);
+        return;
       }
 
+      let data;
+      try { data = JSON.parse(text); } catch(e) { throw new Error('无法解析 API 返回的 JSON。详细响应已显示在下方。'); }
+
+      if (!Array.isArray(data)) {
+        // 当 path 指向单个文件时，API 返回对象而非数组（或返回 message 字段）
+        if (data && data.type === 'file') {
+          resultsEl.innerHTML = '';
+          showMessage('注意：你请求的 path 指向一个文件，而不是目录。请把 path 指向目录（例如 main/ 或 main/subdir）。');
+          return;
+        }
+        if (data && data.message) {
+          resultsEl.innerHTML = '';
+          showMessage('API 返回消息：' + data.message);
+          return;
+        }
+        resultsEl.innerHTML = '';
+        showMessage('API 返回的数据不是数组，具体内容请查看下方原始响应。');
+        return;
+      }
+
+      // 过滤目录
       const dirs = data.filter(item => item.type === 'dir');
       const files = data.filter(item => item.type === 'file');
 
+      // 如果没有目录，提示可能是真没目录或目录为空（未被 Git 跟踪）
       if (dirs.length === 0) {
-        resultsEl.innerHTML = '<p class="hint">未发现子文件夹。</p>';
+        resultsEl.innerHTML = '<p class="hint">未发现子文件夹（GitHub API 返回在该路径下没有 type === "dir" 的条目）。</p>' +
+                              '<p class="hint">可能原因：目录确实没有子目录；或这些子目录是“空的”（Git 不会跟踪空目录）。</p>' +
+                              '<p class="hint">建议：在预计应出现的子目录中添加一个占位文件（例如 .gitkeep 或 README.md）并提交，然后再试。</p>';
+        // 仍然把文件列表显示出来（如果有）
+        if (files.length > 0) {
+          const ftitle = document.createElement('h3');
+          ftitle.textContent = '该目录下的文件';
+          resultsEl.appendChild(ftitle);
+          const ful = document.createElement('ul');
+          files.forEach(f => {
+            const li = document.createElement('li');
+            const a = document.createElement('a');
+            a.href = f.html_url;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.textContent = f.name + ' (' + f.path + ')';
+            li.appendChild(a);
+            ful.appendChild(li);
+          });
+          resultsEl.appendChild(ful);
+        }
         return;
       }
 
       const ul = document.createElement('ul');
       dirs.forEach(d => {
         const li = document.createElement('li');
-
         const left = document.createElement('div');
         const a = document.createElement('a');
         a.textContent = d.name;
@@ -121,11 +207,9 @@
         a.className = 'folder';
         a.addEventListener('click', (e) => {
           e.preventDefault();
-          // 点击进入子目录（在同一页列出）
           pathEl.value = (path.replace(/\/$/, '') ? path.replace(/\/$/, '') + '/' + d.name : d.name);
           listContents(owner, repo, branch, pathEl.value, tokenEl.value);
         });
-
         left.appendChild(a);
         const meta = document.createElement('div');
         meta.className = 'meta';
@@ -140,15 +224,11 @@
         ghLink.target = '_blank';
         ghLink.rel = 'noopener noreferrer';
         ghLink.href = `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/tree/${encodeURIComponent(branch)}/${d.path}`;
-        ghLink.className = 'secondary';
-
         const rawLink = document.createElement('a');
         rawLink.textContent = '打开（在 Pages）';
         rawLink.target = '_blank';
         rawLink.rel = 'noopener noreferrer';
-        // 这里尝试打开 GitHub Pages 结构（如果仓库启用了 Pages），否则用户可使用上面的 GitHub 链接
-        rawLink.href = `/${d.path}/`; // 相对链接，部署在 pages 时通常有效
-
+        rawLink.href = `/${d.path}/`; // 相对链接
         right.appendChild(rawLink);
         right.appendChild(ghLink);
 
@@ -160,7 +240,6 @@
       resultsEl.innerHTML = '';
       resultsEl.appendChild(ul);
 
-      // 可选：显示目录内的文件名（若需要）
       if (files.length > 0) {
         const ftitle = document.createElement('h3');
         ftitle.textContent = '该目录下的文件';
@@ -191,7 +270,7 @@
     const branch = branchEl.value.trim() || 'main';
     const path = pathEl.value.trim() || 'main';
     if (!owner || !repo) {
-      showMessage('请先填写 owner 和 repo。或者使用自动检测。');
+      showMessage('请先填写 owner 和 repo，或使用自动检测。');
       return;
     }
     showMessage('');
@@ -199,13 +278,10 @@
   });
 
   autoDetectBtn.addEventListener('click', () => {
-    // 当页面托管在 https://{owner}.github.io/{repo}/ 或 https://{org}.github.io/{repo}/ 时，尝试解析
     const host = location.hostname;
-    const pathname = location.pathname.replace(/^\/|\/$/g, ''); // 去除首尾 /
+    const pathname = location.pathname.replace(/^\/|\/$/g, '');
     if (host.endsWith('github.io')) {
-      // hostname like username.github.io
       const owner = host.split('.github.io')[0];
-      // path like repo/...
       const segments = pathname.split('/');
       const repo = segments[0] || '';
       if (repo) {
@@ -220,12 +296,10 @@
     showMessage('自动检测失败：页面不是托管在 github.io，或 URL 格式不符合 username.github.io/repo/ 。你也可以手动填写 owner/repo。');
   });
 
-  // 如果页面是从文件系统直接打开（file://），提醒用户需要把此文件放到一个 web 服务器或 GitHub Pages 上
   if (location.protocol === 'file:') {
-    showMessage('警告：检测到你是从本地文件系统打开（file://）。直接打开本地文件时无法访问 GitHub API（跨域等问题）。请将此页面部署到 web 服务器或 GitHub Pages 上，或使用本地开发服务器（例如：python -m http.server）。');
+    showMessage('检测到你是从本地文件系统打开（file://）。建议将此页面部署到 web 服务器或 GitHub Pages，否则可能无法访问 GitHub API。');
   }
 
-  // 尝试从 URL query 自动填充 owner/repo/path/branch，例如 ?owner=xxx&repo=yyy&path=main
   (function autofillFromQuery(){
     try {
       const params = new URLSearchParams(location.search);
@@ -235,7 +309,6 @@
       if (params.get('path')) pathEl.value = params.get('path');
     } catch(e){}
   })();
-
 </script>
 </body>
 </html>
