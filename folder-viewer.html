@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件夹浏览</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .folder-item {
+                @apply flex items-center p-3 border rounded-lg mb-2 hover:bg-gray-50 transition-colors cursor-pointer;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 p-4">
+    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow">
+        <h1 class="text-xl font-bold mb-4">文件夹列表</h1>
+        
+        <div id="status" class="py-6 text-center text-gray-500">
+            <i class="fa fa-spinner fa-spin mr-2"></i>
+            <span>加载文件夹中...</span>
+        </div>
+        
+        <div id="folder-container" class="hidden"></div>
+    </div>
+
+    <script>
+        // 解析服务器目录列表页面，提取文件夹信息
+        function parseDirectoryList(html) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const folders = [];
+
+            // 通用选择器：匹配常见服务器目录列表的链接（Apache/Nginx等）
+            const links = doc.querySelectorAll('a[href$="/"]'); // 文件夹链接通常以/结尾
+            
+            links.forEach(link => {
+                const folderName = link.textContent.trim();
+                const folderPath = link.getAttribute('href');
+                
+                // 排除上级目录链接和空名称
+                if (folderName && !folderName.includes('Parent Directory')) {
+                    folders.push({
+                        name: folderName,
+                        path: folderPath
+                    });
+                }
+            });
+
+            return folders;
+        }
+
+        // 加载并显示文件夹
+        async function loadFolders() {
+            try {
+                // 请求当前目录的列表（依赖服务器开启目录浏览功能）
+                const response = await fetch('.');
+                if (!response.ok) throw new Error('无法获取目录列表');
+                
+                const html = await response.text();
+                const folders = parseDirectoryList(html);
+                
+                if (folders.length === 0) {
+                    document.getElementById('status').innerHTML = 
+                        '<i class="fa fa-folder-open-o mr-2"></i><span>当前目录没有文件夹</span>';
+                    return;
+                }
+
+                // 隐藏状态，显示文件夹列表
+                document.getElementById('status').classList.add('hidden');
+                const container = document.getElementById('folder-container');
+                container.classList.remove('hidden');
+                container.innerHTML = '';
+
+                // 生成文件夹列表
+                folders.forEach(folder => {
+                    const div = document.createElement('div');
+                    div.className = 'folder-item';
+                    div.innerHTML = `
+                        <i class="fa fa-folder text-yellow-500 mr-3"></i>
+                        <span>${folder.name}</span>
+                    `;
+                    
+                    // 点击跳转到文件夹内的index文件
+                    div.addEventListener('click', () => {
+                        window.location.href = folder.path + 'index.html';
+                    });
+                    
+                    container.appendChild(div);
+                });
+
+            } catch (error) {
+                document.getElementById('status').innerHTML = 
+                    '<i class="fa fa-exclamation-circle text-red-500 mr-2"></i>' +
+                    '<span>加载失败，请确保服务器开启了目录浏览功能</span>';
+                console.error('错误:', error);
+            }
+        }
+
+        // 页面加载时执行
+        document.addEventListener('DOMContentLoaded', loadFolders);
+    </script>
+</body>
+</html>
