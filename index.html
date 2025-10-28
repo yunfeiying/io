@@ -1,106 +1,241 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>文件夹浏览</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
-    <style type="text/tailwindcss">
-        @layer utilities {
-            .folder-item {
-                @apply flex items-center p-3 border rounded-lg mb-2 hover:bg-gray-50 transition-colors cursor-pointer;
-            }
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>目录列表 — main</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 1rem; max-width: 900px; margin: auto; }
+    header { display:flex; gap:1rem; align-items:center; margin-bottom:1rem; }
+    label { font-size: .9rem; color:#333; }
+    input[type=text], input[type=password], select { padding:.4rem .6rem; border:1px solid #ddd; border-radius:6px; }
+    button { padding:.5rem .8rem; border-radius:6px; border:0; background:#0366d6; color:white; cursor:pointer; }
+    button.secondary { background:#e1e4e8; color:#111; }
+    ul { list-style:none; padding-left:0; }
+    li { padding:.5rem .4rem; border-bottom:1px solid #f0f0f0; display:flex; justify-content:space-between; align-items:center; }
+    a.folder { text-decoration:none; color:#0366d6; font-weight:600; }
+    .meta { color:#666; font-size:.85rem; }
+    .error { color:#b31d28; margin-top:.5rem; }
+    .hint { color:#444; font-size:.9rem; margin-top:.5rem; }
+    footer { margin-top:1.5rem; color:#666; font-size:.85rem; }
+  </style>
 </head>
-<body class="bg-gray-50 p-4">
-    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow">
-        <h1 class="text-xl font-bold mb-4">文件夹列表</h1>
-        
-        <div id="status" class="py-6 text-center text-gray-500">
-            <i class="fa fa-spinner fa-spin mr-2"></i>
-            <span>加载文件夹中...</span>
-        </div>
-        
-        <div id="folder-container" class="hidden"></div>
+<body>
+  <header>
+    <h1>main 目录列表</h1>
+  </header>
+
+  <section aria-labelledby="settings">
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+      <label>Owner
+        <input id="owner" type="text" placeholder="owner 或 用户名" />
+      </label>
+      <label>Repo
+        <input id="repo" type="text" placeholder="仓库名" />
+      </label>
+      <label>Branch
+        <input id="branch" type="text" value="main" />
+      </label>
+      <label>Path
+        <input id="path" type="text" value="main" />
+      </label>
+      <label style="display:flex; align-items:center;">Token
+        <input id="token" type="password" placeholder="可选：用来增加速率限制/私有仓库" />
+      </label>
+      <button id="listBtn">列出文件夹</button>
+      <button id="autoDetect" class="secondary">自动检测（GitHub Pages）</button>
     </div>
+    <div class="hint">说明：如果页面托管在 GitHub Pages（username.github.io/repo/），可尝试自动检测 owner/repo。若仓库为私有或大量请求，请填入 GitHub 个人 access token（只需 repo 权限或无权限即可做公共请求）。</div>
+    <div id="msg" class="error" role="status" aria-live="polite"></div>
+  </section>
 
-    <script>
-        // 解析服务器目录列表页面，提取文件夹信息
-        function parseDirectoryList(html) {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const folders = [];
+  <main>
+    <h2 id="title">目录：<span id="currentPath">main</span></h2>
+    <div id="results">
+      <p class="hint">还未查询 — 点击“列出文件夹”以加载 main 目录下的子文件夹。</p>
+    </div>
+  </main>
 
-            // 通用选择器：匹配常见服务器目录列表的链接（Apache/Nginx等）
-            const links = doc.querySelectorAll('a[href$="/"]'); // 文件夹链接通常以/结尾
-            
-            links.forEach(link => {
-                const folderName = link.textContent.trim();
-                const folderPath = link.getAttribute('href');
-                
-                // 排除上级目录链接和空名称
-                if (folderName && !folderName.includes('Parent Directory')) {
-                    folders.push({
-                        name: folderName,
-                        path: folderPath
-                    });
-                }
-            });
+  <footer>
+    生成器：通过 GitHub API 列出仓库 contents（仅列出 type === "dir" 的条目）。制作时间：2025。
+  </footer>
 
-            return folders;
-        }
+<script>
+  const ownerEl = document.getElementById('owner');
+  const repoEl = document.getElementById('repo');
+  const branchEl = document.getElementById('branch');
+  const pathEl = document.getElementById('path');
+  const tokenEl = document.getElementById('token');
+  const listBtn = document.getElementById('listBtn');
+  const autoDetectBtn = document.getElementById('autoDetect');
+  const resultsEl = document.getElementById('results');
+  const msgEl = document.getElementById('msg');
+  const currentPathEl = document.getElementById('currentPath');
 
-        // 加载并显示文件夹
-        async function loadFolders() {
-            try {
-                // 请求当前目录的列表（依赖服务器开启目录浏览功能）
-                const response = await fetch('.');
-                if (!response.ok) throw new Error('无法获取目录列表');
-                
-                const html = await response.text();
-                const folders = parseDirectoryList(html);
-                
-                if (folders.length === 0) {
-                    document.getElementById('status').innerHTML = 
-                        '<i class="fa fa-folder-open-o mr-2"></i><span>当前目录没有文件夹</span>';
-                    return;
-                }
+  function showMessage(text){
+    msgEl.textContent = text;
+    if(!text) msgEl.style.display = 'none';
+    else msgEl.style.display = 'block';
+  }
 
-                // 隐藏状态，显示文件夹列表
-                document.getElementById('status').classList.add('hidden');
-                const container = document.getElementById('folder-container');
-                container.classList.remove('hidden');
-                container.innerHTML = '';
+  async function listContents(owner, repo, branch, path, token){
+    showMessage('');
+    resultsEl.innerHTML = '<p class="hint">加载中…</p>';
+    currentPathEl.textContent = path;
 
-                // 生成文件夹列表
-                folders.forEach(folder => {
-                    const div = document.createElement('div');
-                    div.className = 'folder-item';
-                    div.innerHTML = `
-                        <i class="fa fa-folder text-yellow-500 mr-3"></i>
-                        <span>${folder.name}</span>
-                    `;
-                    
-                    // 点击跳转到文件夹内的index文件
-                    div.addEventListener('click', () => {
-                        window.location.href = folder.path + 'index.html';
-                    });
-                    
-                    container.appendChild(div);
-                });
+    const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
+    const headers = { 'Accept': 'application/vnd.github+json' };
+    if (token) headers['Authorization'] = 'token ' + token;
 
-            } catch (error) {
-                document.getElementById('status').innerHTML = 
-                    '<i class="fa fa-exclamation-circle text-red-500 mr-2"></i>' +
-                    '<span>加载失败，请确保服务器开启了目录浏览功能</span>';
-                console.error('错误:', error);
-            }
-        }
+    try {
+      const res = await fetch(apiUrl, { headers });
+      if (res.status === 404) {
+        throw new Error('路径或仓库不存在，或没有权限访问（404）。请检查 owner/repo/branch/path 是否正确。');
+      }
+      if (res.status === 401 || res.status === 403) {
+        const text = await res.text();
+        throw new Error(`权限或速率限制问题：HTTP ${res.status} — ${text}`);
+      }
+      const data = await res.json();
+      if (!Array.isArray(data)) {
+        // 当 path 指向单个文件时，API 返回对象而非数组
+        throw new Error('指定 path 不是目录，或 API 返回预期之外的数据。');
+      }
 
-        // 页面加载时执行
-        document.addEventListener('DOMContentLoaded', loadFolders);
-    </script>
+      const dirs = data.filter(item => item.type === 'dir');
+      const files = data.filter(item => item.type === 'file');
+
+      if (dirs.length === 0) {
+        resultsEl.innerHTML = '<p class="hint">未发现子文件夹。</p>';
+        return;
+      }
+
+      const ul = document.createElement('ul');
+      dirs.forEach(d => {
+        const li = document.createElement('li');
+
+        const left = document.createElement('div');
+        const a = document.createElement('a');
+        a.textContent = d.name;
+        a.href = '#';
+        a.className = 'folder';
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          // 点击进入子目录（在同一页列出）
+          pathEl.value = (path.replace(/\/$/, '') ? path.replace(/\/$/, '') + '/' + d.name : d.name);
+          listContents(owner, repo, branch, pathEl.value, tokenEl.value);
+        });
+
+        left.appendChild(a);
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent = `（在 GitHub 上：${d.path}）`;
+        left.appendChild(meta);
+
+        const right = document.createElement('div');
+        right.style.display = 'flex';
+        right.style.gap = '0.5rem';
+        const ghLink = document.createElement('a');
+        ghLink.textContent = '打开 GitHub';
+        ghLink.target = '_blank';
+        ghLink.rel = 'noopener noreferrer';
+        ghLink.href = `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/tree/${encodeURIComponent(branch)}/${d.path}`;
+        ghLink.className = 'secondary';
+
+        const rawLink = document.createElement('a');
+        rawLink.textContent = '打开（在 Pages）';
+        rawLink.target = '_blank';
+        rawLink.rel = 'noopener noreferrer';
+        // 这里尝试打开 GitHub Pages 结构（如果仓库启用了 Pages），否则用户可使用上面的 GitHub 链接
+        rawLink.href = `/${d.path}/`; // 相对链接，部署在 pages 时通常有效
+
+        right.appendChild(rawLink);
+        right.appendChild(ghLink);
+
+        li.appendChild(left);
+        li.appendChild(right);
+        ul.appendChild(li);
+      });
+
+      resultsEl.innerHTML = '';
+      resultsEl.appendChild(ul);
+
+      // 可选：显示目录内的文件名（若需要）
+      if (files.length > 0) {
+        const ftitle = document.createElement('h3');
+        ftitle.textContent = '该目录下的文件';
+        resultsEl.appendChild(ftitle);
+        const ful = document.createElement('ul');
+        files.forEach(f => {
+          const li = document.createElement('li');
+          const a = document.createElement('a');
+          a.href = f.html_url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = f.name;
+          li.appendChild(a);
+          ful.appendChild(li);
+        });
+        resultsEl.appendChild(ful);
+      }
+
+    } catch (err) {
+      resultsEl.innerHTML = '';
+      showMessage(err.message || String(err));
+    }
+  }
+
+  listBtn.addEventListener('click', () => {
+    const owner = ownerEl.value.trim();
+    const repo = repoEl.value.trim();
+    const branch = branchEl.value.trim() || 'main';
+    const path = pathEl.value.trim() || 'main';
+    if (!owner || !repo) {
+      showMessage('请先填写 owner 和 repo。或者使用自动检测。');
+      return;
+    }
+    showMessage('');
+    listContents(owner, repo, branch, path, tokenEl.value.trim());
+  });
+
+  autoDetectBtn.addEventListener('click', () => {
+    // 当页面托管在 https://{owner}.github.io/{repo}/ 或 https://{org}.github.io/{repo}/ 时，尝试解析
+    const host = location.hostname;
+    const pathname = location.pathname.replace(/^\/|\/$/g, ''); // 去除首尾 /
+    if (host.endsWith('github.io')) {
+      // hostname like username.github.io
+      const owner = host.split('.github.io')[0];
+      // path like repo/...
+      const segments = pathname.split('/');
+      const repo = segments[0] || '';
+      if (repo) {
+        ownerEl.value = owner;
+        repoEl.value = repo;
+        branchEl.value = 'main';
+        pathEl.value = 'main';
+        showMessage(`已填写 owner=${owner} repo=${repo}，请点击“列出文件夹”。`);
+        return;
+      }
+    }
+    showMessage('自动检测失败：页面不是托管在 github.io，或 URL 格式不符合 username.github.io/repo/ 。你也可以手动填写 owner/repo。');
+  });
+
+  // 如果页面是从文件系统直接打开（file://），提醒用户需要把此文件放到一个 web 服务器或 GitHub Pages 上
+  if (location.protocol === 'file:') {
+    showMessage('警告：检测到你是从本地文件系统打开（file://）。直接打开本地文件时无法访问 GitHub API（跨域等问题）。请将此页面部署到 web 服务器或 GitHub Pages 上，或使用本地开发服务器（例如：python -m http.server）。');
+  }
+
+  // 尝试从 URL query 自动填充 owner/repo/path/branch，例如 ?owner=xxx&repo=yyy&path=main
+  (function autofillFromQuery(){
+    try {
+      const params = new URLSearchParams(location.search);
+      if (params.get('owner')) ownerEl.value = params.get('owner');
+      if (params.get('repo')) repoEl.value = params.get('repo');
+      if (params.get('branch')) branchEl.value = params.get('branch');
+      if (params.get('path')) pathEl.value = params.get('path');
+    } catch(e){}
+  })();
+
+</script>
 </body>
 </html>
