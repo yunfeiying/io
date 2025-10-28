@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="uuid_id" version="2.0">
+    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+        <dc:identifier opf:scheme="calibre" id="calibre_id">aac170d1-fae5-4db4-8bf6-c61c13c568dc</dc:identifier>
+        <dc:identifier opf:scheme="uuid" id="uuid_id">d4262ba4-a1b6-4ed5-adef-4d34c9fb45ce</dc:identifier>
+        <dc:title>纳瓦尔宝典（硅谷投资人纳瓦尔十年人生智慧，教你如何获得财富与幸福。新时代创业者的《穷查理宝典》）</dc:title>
+        <dc:creator opf:file-as="埃里克·乔根森" opf:role="aut">埃里克·乔根森</dc:creator>
+        <dc:contributor opf:file-as="calibre" opf:role="bkp">calibre (5.34.0) [https://calibre-ebook.com]</dc:contributor>
+        <dc:date>2022-03-31T16:00:00+00:00</dc:date>
+        <dc:publisher>中信出版社</dc:publisher>
+        <dc:language>zh</dc:language>
+        <meta name="calibre:author_link_map" content="{}"/>
+    </metadata>
+    <guide>
+        <reference type="cover" title="封面" href="cover.jpg"/>
+    </guide>
+</package>
